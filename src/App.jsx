@@ -1682,6 +1682,8 @@ function CasesPage({ cases, setCases, students = [], batches = [], setAnomalies,
   const [filter, setFilter] = useState('All cases');
   const [selected, setSelected] = useState(cases[0]?.id);
   const [pageNumber, setPageNumber] = useState(1);
+  const [resolvingCase, setResolvingCase] = useState(null);
+  const [resolutionNotes, setResolutionNotes] = useState('');
   const pageSize = 10;
 
   const filtered = useMemo(() => {
@@ -1709,8 +1711,15 @@ function CasesPage({ cases, setCases, students = [], batches = [], setAnomalies,
 
   const item = filtered.find(c => c.id === selected) || paginated[0] || cases[0];
 
-  function updateStatus(caseId, nextStatus) {
-    const note = nextStatus === 'Resolved' ? 'Case resolved by officer after evidence reconciliation.' : `Status updated to ${nextStatus}`;
+  function handleUpdateAssignment(caseId, unit) {
+    demoDataService.updateCases(old => old.map(c => c.id === caseId ? { ...c, assignedTo: unit } : c));
+    setCases(demoDataService.getCases());
+    onLog?.(`Case ${caseId} assignment updated to ${unit}`, caseId, 'Case action');
+    onNotify?.(`Case ${caseId} reassigned to ${unit}.`);
+  }
+
+  function updateStatus(caseId, nextStatus, customNote) {
+    const note = customNote || (nextStatus === 'Resolved' ? 'Case resolved by regulatory officer after evidence reconciliation.' : `Status updated to ${nextStatus}`);
     demoDataService.updateCases(old => old.map(c => c.id === caseId ? { ...c, status: nextStatus, resolutionNote: note } : c));
     setCases(demoDataService.getCases());
 
@@ -1725,8 +1734,10 @@ function CasesPage({ cases, setCases, students = [], batches = [], setAnomalies,
       setAnomalies?.(demoDataService.getAnomalies());
     }
 
-    onLog?.(`Case ${caseId} status updated to ${nextStatus}`, caseId, 'Case action');
+    onLog?.(`Case ${caseId} status updated to ${nextStatus}: ${note}`, caseId, 'Case action');
     onNotify?.(`Case ${caseId} marked as ${nextStatus}.`);
+    setResolvingCase(null);
+    setResolutionNotes('');
   }
 
   return (
@@ -1808,9 +1819,43 @@ function CasesPage({ cases, setCases, students = [], batches = [], setAnomalies,
             <div className="case-facts">
               <div><span>Case confidence</span><strong>{item.confidence}%</strong></div>
               <div><span>Detected</span><strong>{item.age}</strong></div>
-              <div><span>Assigned unit</span><strong>Regulation Bureau</strong></div>
+              <div>
+                <span>Assigned unit</span>
+                <select
+                  value={item.assignedTo || 'Regulation Bureau'}
+                  onChange={e => handleUpdateAssignment(item.id, e.target.value)}
+                  style={{
+                    padding: '2px 6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    borderRadius: '4px',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)',
+                    marginTop: '2px'
+                  }}
+                  title="Change Unit Assignment"
+                >
+                  <option value="Regulation Bureau">Regulation Bureau</option>
+                  <option value="Regional Directorate (North)">Regional Directorate (North)</option>
+                  <option value="Data Governance Cell">Data Governance Cell</option>
+                  <option value="Institutional Registrar Desk">Institutional Registrar Desk</option>
+                  <option value="Central Ombudsman">Central Ombudsman</option>
+                </select>
+              </div>
               <div><span>Current status</span><strong>{item.status}</strong></div>
             </div>
+
+            {item.status === 'Resolved' && item.resolutionNote && (
+              <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', padding: '12px 14px', borderRadius: '8px', margin: '14px 0' }}>
+                <strong style={{ fontSize: '12px', color: '#15803d', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={15} /> Officer Resolution Notes
+                </strong>
+                <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#166534', lineHeight: 1.4 }}>
+                  {item.resolutionNote}
+                </p>
+              </div>
+            )}
 
             <SectionLabel>01 / EVIDENCE COLLECTED</SectionLabel>
             <div className="evidence-list">
@@ -1896,13 +1941,72 @@ function CasesPage({ cases, setCases, students = [], batches = [], setAnomalies,
             <div className="case-footer-actions">
               <Btn onClick={() => updateStatus(item.id, 'Waiting on institution')} icon={MessageSquareText}>Request correction</Btn>
               <Btn onClick={() => updateStatus(item.id, 'In review')} icon={Eye}>Move to review</Btn>
-              <Btn variant="primary" icon={CheckCircle2} onClick={() => updateStatus(item.id, 'Resolved')}>Resolve case</Btn>
+              <Btn variant="primary" icon={CheckCircle2} onClick={() => { setResolutionNotes(`Resolved by Officer: Verified student records with ${item.institution}. Remediation criteria satisfied.`); setResolvingCase(item); }}>
+                Resolve case...
+              </Btn>
             </div>
           </section>
         ) : (
           <section className="panel empty">No cases match this filter.</section>
         )}
       </div>
+
+      {/* Case Resolution Modal with custom notes */}
+      {resolvingCase && (
+        <Modal
+          title={`Resolve Regulatory Case · ${resolvingCase.id}`}
+          desc={`Subject: ${resolvingCase.title} (${resolvingCase.person || resolvingCase.institution})`}
+          onClose={() => setResolvingCase(null)}
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', width: '100%' }}>
+              <Btn onClick={() => setResolvingCase(null)}>Cancel</Btn>
+              <Btn
+                variant="primary"
+                icon={CheckCircle2}
+                onClick={() => updateStatus(resolvingCase.id, 'Resolved', resolutionNotes)}
+              >
+                Confirm Resolution & Log Audit
+              </Btn>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div className="evidence-box">
+              <Sparkles size={18} />
+              <div>
+                <strong>Recommended Next Action</strong>
+                <p>{resolvingCase.recommendation}</p>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, marginBottom: '6px' }}>
+                Officer Resolution Notes & Regulatory Rationale *
+              </label>
+              <textarea
+                value={resolutionNotes}
+                onChange={e => setResolutionNotes(e.target.value)}
+                placeholder="Enter detailed investigation findings, registrar clarification, or remediation confirmation..."
+                rows={4}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12.5px',
+                  fontFamily: 'inherit',
+                  resize: 'vertical'
+                }}
+              />
+              <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px', display: 'block' }}>
+                This rationale will be recorded permanently in the immutable audit trail for case #{resolvingCase.id}.
+              </span>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -3830,6 +3934,19 @@ function App() {
                   activeRole={activeRole}
                   setActiveRole={setActiveRole}
                 />
+              )}
+
+              {!Object.keys(titleMap).includes(page) && (
+                <div className="panel" style={{ padding: '48px 24px', textAlign: 'center', margin: '20px 0' }}>
+                  <AlertCircle size={44} style={{ color: 'var(--amber-500)', margin: '0 auto 14px', display: 'block' }} />
+                  <h2 style={{ marginBottom: '8px' }}>Module Route Not Found</h2>
+                  <p style={{ color: 'var(--text-secondary)', maxWidth: '440px', margin: '0 auto 20px', fontSize: '13.5px' }}>
+                    The requested route <code>{page}</code> could not be resolved in the AICTE demonstration platform.
+                  </p>
+                  <Btn variant="primary" icon={Home} onClick={() => setPage('overview')}>
+                    Return to Regulatory Command Centre
+                  </Btn>
+                </div>
               )}
             </>
           )}

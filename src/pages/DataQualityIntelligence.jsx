@@ -409,8 +409,8 @@ export default function DataQualityIntelligence({
                   <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div><span style={{ color: 'var(--text-tertiary)' }}>Student:</span> <strong>{inspectStudent.name}</strong></div>
                     <div><span style={{ color: 'var(--text-tertiary)' }}>APAAR:</span> <span className="mono" style={{ color: 'var(--teal-600)' }}>{inspectStudent.apaar === 'Not provided' ? '•••• •••• 5519' : inspectStudent.apaar}</span></div>
-                    <div><span style={{ color: 'var(--text-tertiary)' }}>Status:</span> <b style={{ color: 'var(--teal-600)' }}>Verified</b></div>
-                    <div><span style={{ color: 'var(--text-tertiary)' }}>Resolution:</span> <p style={{ margin: '2px 0 0', color: 'var(--teal-600)' }}>Mandatory fields normalized and validated</p></div>
+                    <div><span style={{ color: 'var(--text-tertiary)' }}>Status:</span> <b style={{ color: 'var(--blue-primary)' }}>Review required (Quality Restored)</b></div>
+                    <div><span style={{ color: 'var(--text-tertiary)' }}>Resolution:</span> <p style={{ margin: '2px 0 0', color: 'var(--teal-600)' }}>Mandatory fields normalized and validated (identity check remains separate)</p></div>
                   </div>
                 </div>
               </div>
