@@ -1,13 +1,13 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import {
-  Activity, AlertOctagon, AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, BrainCircuit, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, ClipboardCheck, Clock3, CloudUpload, Command, Database, Download, Eye, FileSpreadsheet, FileText, Fingerprint, Gauge, GitCompare, GraduationCap, History, Home, LockKeyhole, Menu, MessageSquareText, MoreHorizontal, Network, Plus, RefreshCw, Search, Send, Settings2, Shield, ShieldAlert, ShieldCheck, SlidersHorizontal, Sparkles, Upload, Users, X, BarChart3, CheckCheck, CircleDot, ScanSearch, AlertCircle, Landmark, ListChecks, ChevronUp, UserCheck, FileSearch, MapPin, Server, BadgeCheck, Filter
+  Activity, AlertOctagon, AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, BrainCircuit, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, ClipboardCheck, Clock3, CloudUpload, Command, Database, Download, Eye, FileSpreadsheet, FileText, Fingerprint, Gauge, GitCompare, GraduationCap, History, Home, LockKeyhole, Menu, MessageSquareText, MoreHorizontal, Network, Plus, RefreshCw, Search, Send, Settings2, Shield, ShieldAlert, ShieldCheck, SlidersHorizontal, Sparkles, Upload, Users, X, BarChart3, CheckCheck, CircleDot, ScanSearch, AlertCircle, Landmark, ListChecks, ChevronUp, UserCheck, FileSearch, MapPin, Server, BadgeCheck, Filter, LogOut
 } from 'lucide-react';
 import './styles.css';
 
 import { demoDataService } from './services/demoDataService.js';
 import { calculateDashboardMetrics, calculateAdvancedDashboardMetrics, downloadCSV, parseCSV, downloadCSVTemplate, downloadErrorReport } from './utils/dataCalculations.js';
 
-
+import LoginPortal from './pages/LoginPortal.jsx';
 import IdentityResolutionLab from './pages/IdentityResolutionLab.jsx';
 import AiDecisionCentre from './pages/AiDecisionCentre.jsx';
 import DataQualityIntelligence from './pages/DataQualityIntelligence.jsx';
@@ -2726,7 +2726,7 @@ function AuditPage({ audit }) {
 /* ==========================================================================
    12. SETTINGS PAGE (ACCESS & SETTINGS + SEED CONTROLS)
    ========================================================================== */
-function SettingsPage({ onResetDemoData, totalCounts, activeRole = 'admin', setActiveRole }) {
+function SettingsPage({ onResetDemoData, totalCounts, activeRole = 'admin', setActiveRole, session, onSignOut }) {
   const [showConfirmReset, setShowConfirmReset] = useState(false);
   const [toggles, setToggles] = useState({ mask: true, alerts: true, weekly: false, anomaly: true });
 
@@ -2764,6 +2764,24 @@ function SettingsPage({ onResetDemoData, totalCounts, activeRole = 'admin', setA
               </small>
             </section>
           </div>
+
+          <div style={{ marginTop: '12px', padding: '12px', background: 'var(--surface-muted)', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span className="badge amber" style={{ fontSize: '9px', padding: '1px 6px' }}>DEMO SESSION</span>
+              <small style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>
+                {session?.authenticatedAt ? `Started: ${new Date(session.authenticatedAt).toLocaleTimeString()}` : 'Simulation Mode'}
+              </small>
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+              Active Demo Identity: <strong style={{ color: 'var(--navy-900)' }}>{session?.email || 'regulatory.official@aicte.gov.in'}</strong>
+            </div>
+            {onSignOut && (
+              <Btn variant="secondary" icon={LogOut} onClick={onSignOut} style={{ width: '100%', justifyContent: 'center', color: '#DC2626', borderColor: '#FECACA' }}>
+                End Demonstration Session & Return to Portal
+              </Btn>
+            )}
+          </div>
+
           <SectionLabel>SECURITY PRINCIPLES</SectionLabel>
           {['Least-privilege access', 'Masked identifiers by default', 'Server-side authorisation', 'Auditable decisions', 'Defined retention and deletion'].map(x => (
             <div className="security-principle" key={x}>
@@ -3250,7 +3268,37 @@ function ImportPreviewModal({ data, onCancel, onConfirm, onDownloadErrorReport }
    MAIN APP ORCHESTRATOR
    ========================================================================== */
 function App() {
-  const [page, setPage] = useState('overview');
+  const [session, setSession] = useState(() => {
+    try {
+      const raw = localStorage.getItem('apaar_auth_session');
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [activeRole, setActiveRole] = useState(() => {
+    try {
+      const raw = localStorage.getItem('apaar_auth_session');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.role) return parsed.role;
+      }
+    } catch (e) {}
+    return 'admin';
+  });
+
+  const [page, setPage] = useState(() => {
+    try {
+      const raw = localStorage.getItem('apaar_auth_session');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.role === 'institution_operator') return 'intake';
+        if (parsed.role === 'reviewer') return 'matching';
+      }
+    } catch (e) {}
+    return 'overview';
+  });
 
   // Centralized datasets initialized from DemoDataService
   const [students, setStudents] = useState(() => demoDataService.getStudents());
@@ -3267,7 +3315,6 @@ function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [notifications, setNotifications] = useState(false);
   const [toast, setToast] = useState(null);
-  const [activeRole, setActiveRole] = useState('admin');
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [importPreviewData, setImportPreviewData] = useState(null);
 
@@ -3311,6 +3358,50 @@ function App() {
       allowedPages: ['overview', 'students', 'matching', 'quality', 'insights', 'anomalies', 'cases', 'lineage', 'simulator', 'verification', 'reports', 'audit']
     }
   };
+
+  function handleEnterDemo(role, email) {
+    const selectedRole = role || 'admin';
+    const newSession = {
+      role: selectedRole,
+      email: email || (selectedRole === 'admin' ? 'official.admin@aicte.gov.in' : selectedRole === 'institution_operator' ? 'registrar@iitd.ac.in' : 'officer.deshmukh@aicte.gov.in'),
+      mode: 'demo',
+      authenticatedAt: new Date().toISOString()
+    };
+    try {
+      localStorage.setItem('apaar_auth_session', JSON.stringify(newSession));
+    } catch (e) {}
+    setSession(newSession);
+    setActiveRole(selectedRole);
+    if (selectedRole === 'institution_operator') {
+      setPage('intake');
+    } else if (selectedRole === 'reviewer') {
+      setPage('matching');
+    } else {
+      setPage('overview');
+    }
+    notify(`Demonstration Session Initialized · Role: ${roleDetails[selectedRole]?.name || selectedRole}`);
+  }
+
+  function handleSignOut() {
+    try {
+      localStorage.removeItem('apaar_auth_session');
+    } catch (e) {}
+    setSession(null);
+    setRoleMenuOpen(false);
+    setPage('overview');
+  }
+
+  function handleRoleChange(newRole) {
+    setActiveRole(newRole);
+    if (session) {
+      const updated = { ...session, role: newRole };
+      setSession(updated);
+      try {
+        localStorage.setItem('apaar_auth_session', JSON.stringify(updated));
+      } catch (e) {}
+    }
+    notify(`Switched demonstration persona to: ${roleDetails[newRole]?.name || newRole}`);
+  }
 
   // Keyboard shortcut Ctrl+K / Cmd+K for Global Search
   useEffect(() => {
@@ -3539,6 +3630,10 @@ function App() {
 
   const openCasesCount = cases.filter(c => c.status !== 'Resolved').length;
 
+  if (!session) {
+    return <LoginPortal onEnterDemo={handleEnterDemo} />;
+  }
+
   return (
     <div className="app-shell">
       <aside className={cx('sidebar', mobileOpen && 'mobile-open', sidebarCollapsed && 'collapsed')}>
@@ -3566,7 +3661,7 @@ function App() {
         </div>
 
         <div className="sidebar-label">WORKSPACE ENVIRONMENT</div>
-        <div className="environment"><i /><span style={{ textTransform: 'uppercase' }}>Demo Role: {roleDetails[activeRole].name}</span></div>
+        <div className="environment"><i /><span style={{ textTransform: 'uppercase' }}>Demo Role: {roleDetails[activeRole]?.name || activeRole}</span></div>
 
         <nav>
           {nav.map(group => (
@@ -3579,7 +3674,7 @@ function App() {
                     key={id}
                     className={cx('nav-item', page === id && 'active', isRestrictedForRole && 'restricted')}
                     onClick={() => { setPage(id); setMobileOpen(false); }}
-                    title={isRestrictedForRole ? `${label} (Restricted for ${roleDetails[activeRole].name})` : label}
+                    title={isRestrictedForRole ? `${label} (Restricted for ${roleDetails[activeRole]?.name})` : label}
                   >
                     <Icon size={18} />
                     <span>{label}</span>
@@ -3601,14 +3696,14 @@ function App() {
             <button onClick={() => setPage('matching')}>Open matching lab <ArrowRight size={13} /></button>
           </div>
 
-          <div className="user-profile" onClick={() => setRoleMenuOpen(!roleMenuOpen)} style={{ cursor: 'pointer' }} title="Click to Switch Demo Persona">
-            <div className="user-avatar">{roleDetails[activeRole].initials}</div>
+          <div className="user-profile" onClick={() => setRoleMenuOpen(!roleMenuOpen)} style={{ cursor: 'pointer' }} title="Click to Switch Demo Persona / Sign Out">
+            <div className="user-avatar">{roleDetails[activeRole]?.initials || 'DM'}</div>
             <div className="user-info">
-              <strong>{roleDetails[activeRole].name}</strong>
-              <span>{roleDetails[activeRole].subtitle}</span>
+              <strong>{roleDetails[activeRole]?.name || activeRole}</strong>
+              <span>{roleDetails[activeRole]?.subtitle}</span>
             </div>
-            <button className="icon-btn" title="Settings" onClick={e => { e.stopPropagation(); setPage('settings'); }}>
-              <Settings2 size={16} />
+            <button className="icon-btn" title="End Demo Session" onClick={e => { e.stopPropagation(); handleSignOut(); }}>
+              <LogOut size={16} style={{ color: 'var(--red-400)' }} />
             </button>
           </div>
         </div>
@@ -3649,14 +3744,23 @@ function App() {
               {notificationHistory.length > 0 && <i />}
             </button>
             <div className="top-divider" />
-            <div className="top-user" onClick={() => setRoleMenuOpen(!roleMenuOpen)} style={{ cursor: 'pointer' }} title="Click to Switch Demo Persona">
-              <div className="user-avatar">{roleDetails[activeRole].initials}</div>
+            <button
+              className="btn btn-secondary"
+              onClick={handleSignOut}
+              title="End demo session and return to Login Portal"
+              style={{ fontSize: '11.5px', padding: '4px 9px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+            >
+              <LogOut size={13} style={{ color: 'var(--red-500)' }} />
+              <span>Exit Demo</span>
+            </button>
+            <div className="top-user" onClick={() => setRoleMenuOpen(!roleMenuOpen)} style={{ cursor: 'pointer' }} title="Click to Switch Demo Persona / Sign Out">
+              <div className="user-avatar">{roleDetails[activeRole]?.initials || 'DM'}</div>
               <div className="top-user-info">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <strong>{roleDetails[activeRole].name}</strong>
+                  <strong>{roleDetails[activeRole]?.name || activeRole}</strong>
                   <span className={cx('role-badge', activeRole)} style={{ fontSize: '9px', padding: '1px 5px' }}>DEMO</span>
                 </div>
-                <span>{roleDetails[activeRole].subtitle}</span>
+                <span>{roleDetails[activeRole]?.subtitle}</span>
               </div>
               <ChevronDown size={14} />
             </div>
@@ -3664,17 +3768,17 @@ function App() {
 
           {roleMenuOpen && (
             <div className="role-switcher-menu">
-              <div style={{ padding: '6px 10px', fontSize: '11px', fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', borderBottom: '1px solid #E2E8F0', marginBottom: '4px' }}>
-                Switch Demonstration Role
+              <div style={{ padding: '6px 10px', fontSize: '11px', fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', borderBottom: '1px solid #E2E8F0', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Demo Persona ({session?.email?.split('@')[0] || 'User'})</span>
+                <span className="badge amber" style={{ fontSize: '8.5px', padding: '1px 5px' }}>Demo Mode</span>
               </div>
               {Object.entries(roleDetails).map(([roleKey, details]) => (
                 <button
                   key={roleKey}
                   className={cx('role-option-btn', activeRole === roleKey && 'active')}
                   onClick={() => {
-                    setActiveRole(roleKey);
+                    handleRoleChange(roleKey);
                     setRoleMenuOpen(false);
-                    notify(`Switched demonstration persona to: ${details.name}`);
                   }}
                 >
                   <div className="user-avatar" style={{ width: '28px', height: '28px', fontSize: '11px' }}>{details.initials}</div>
@@ -3687,6 +3791,19 @@ function App() {
               <div style={{ padding: '8px 10px 4px', fontSize: '10.5px', color: 'var(--text-tertiary)', borderTop: '1px solid #F1F5F9', marginTop: '4px' }}>
                 Client-side demonstration simulation of role permissions matrix.
               </div>
+              <button
+                className="role-option-btn"
+                style={{ marginTop: '4px', borderTop: '1px solid #E2E8F0', paddingTop: '8px', color: '#B91C1C', width: '100%', display: 'flex', alignItems: 'center', gap: '8px' }}
+                onClick={handleSignOut}
+              >
+                <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: '#FEF2F2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <LogOut size={14} />
+                </div>
+                <div style={{ minWidth: 0, textAlign: 'left' }}>
+                  <strong style={{ fontSize: '12px', color: '#B91C1C', display: 'block' }}>End Demo Session</strong>
+                  <span style={{ fontSize: '10.5px', color: '#64748B', display: 'block' }}>Return to Login Portal</span>
+                </div>
+              </button>
             </div>
           )}
 
@@ -3932,7 +4049,9 @@ function App() {
                     audit: audit.length
                   }}
                   activeRole={activeRole}
-                  setActiveRole={setActiveRole}
+                  setActiveRole={handleRoleChange}
+                  session={session}
+                  onSignOut={handleSignOut}
                 />
               )}
 
